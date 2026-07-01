@@ -1,0 +1,558 @@
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+
+  :root{
+    --bg:#090C11;
+    --bg-grid: rgba(79,216,232,0.035);
+    --surface:#10151D;
+    --surface-2:#161E29;
+    --surface-3:#1C2531;
+    --border:#212B38;
+    --border-soft:#1A222D;
+    --text:#E9EEF4;
+    --text-dim:#8C97A8;
+    --text-faint:#5C6779;
+    --cyan:#4FD8E8;
+    --blue:#5B8DEF;
+    --amber:#F5A623;
+    --red:#EF5B5B;
+    --green:#3DDC84;
+    --purple:#9B7BF0;
+  }
+
+  *{box-sizing:border-box; margin:0; padding:0;}
+
+  body{
+    background:
+      radial-gradient(circle at 15% 0%, rgba(91,141,239,0.10), transparent 45%),
+      radial-gradient(circle at 85% 15%, rgba(79,216,232,0.08), transparent 40%),
+      var(--bg);
+    color:var(--text);
+    font-family:'Inter',sans-serif;
+    padding:0 0 80px 0;
+    min-height:100vh;
+    background-attachment:fixed;
+  }
+
+  .scanlines{
+    position:fixed; inset:0; pointer-events:none; z-index:0;
+    background-image: repeating-linear-gradient(0deg, var(--bg-grid) 0px, var(--bg-grid) 1px, transparent 1px, transparent 34px),
+                       repeating-linear-gradient(90deg, var(--bg-grid) 0px, var(--bg-grid) 1px, transparent 1px, transparent 34px);
+    opacity:0.6;
+  }
+
+  .wrap{position:relative; z-index:1; max-width:1280px; margin:0 auto; padding:36px 28px;}
+
+  /* ---------- HEADER ---------- */
+  .topbar{display:flex; align-items:flex-start; justify-content:space-between; gap:24px; margin-bottom:22px; flex-wrap:wrap;}
+  .brand{display:flex; align-items:center; gap:12px;}
+  .brand-mark{
+    width:40px; height:40px; border-radius:10px;
+    background:linear-gradient(135deg, var(--cyan), var(--blue));
+    display:flex; align-items:center; justify-content:center;
+    font-family:'Space Grotesk',sans-serif; font-weight:700; color:#061019; font-size:18px;
+    box-shadow:0 0 24px rgba(79,216,232,0.35);
+  }
+  .brand-text h1{font-family:'Space Grotesk',sans-serif; font-size:20px; font-weight:600; letter-spacing:-0.01em;}
+  .brand-text span{font-size:12.5px; color:var(--text-dim); font-family:'IBM Plex Mono',monospace;}
+  .scan-status{display:flex; align-items:center; gap:8px; font-family:'IBM Plex Mono',monospace; font-size:12px; color:var(--green); background:rgba(61,220,132,0.08); border:1px solid rgba(61,220,132,0.25); padding:7px 14px; border-radius:100px;}
+  .scan-dot{width:7px; height:7px; border-radius:50%; background:var(--green); box-shadow:0 0 8px var(--green); animation:pulse 1.8s infinite;}
+  @keyframes pulse{0%,100%{opacity:1;} 50%{opacity:0.35;}}
+
+  .disclaimer{
+    background:var(--surface); border:1px solid var(--border); border-left:3px solid var(--amber);
+    border-radius:10px; padding:14px 18px; margin-bottom:28px; font-size:13px; color:var(--text-dim); line-height:1.6;
+  }
+  .disclaimer b{color:var(--text);}
+
+  /* ---------- SECTION LABEL ---------- */
+  .section{margin-top:44px;}
+  .section-head{display:flex; align-items:baseline; justify-content:space-between; margin-bottom:16px; gap:12px; flex-wrap:wrap;}
+  .section-head h2{font-family:'Space Grotesk',sans-serif; font-size:17px; font-weight:600;}
+  .section-head .tag{font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--text-faint); letter-spacing:0.04em;}
+  .estimate-pill{
+    display:inline-flex; align-items:center; gap:5px; font-family:'IBM Plex Mono',monospace; font-size:10.5px;
+    background:rgba(155,123,240,0.10); color:var(--purple); border:1px solid rgba(155,123,240,0.3);
+    padding:2px 8px; border-radius:100px; text-transform:uppercase; letter-spacing:0.04em;
+  }
+  .fact-pill{
+    display:inline-flex; align-items:center; gap:5px; font-family:'IBM Plex Mono',monospace; font-size:10.5px;
+    background:rgba(79,216,232,0.10); color:var(--cyan); border:1px solid rgba(79,216,232,0.3);
+    padding:2px 8px; border-radius:100px; text-transform:uppercase; letter-spacing:0.04em;
+  }
+
+  .card{background:var(--surface); border:1px solid var(--border); border-radius:14px;}
+
+  /* ---------- SCORES ROW ---------- */
+  .scores-grid{display:grid; grid-template-columns:1.3fr 1.3fr 1fr; gap:16px;}
+  @media(max-width:900px){.scores-grid{grid-template-columns:1fr;}}
+  .score-card{padding:22px; display:flex; align-items:center; gap:20px;}
+  .ring-wrap{position:relative; width:104px; height:104px; flex-shrink:0;}
+  .ring-wrap svg{transform:rotate(-90deg);}
+  .ring-label{position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center;}
+  .ring-label .num{font-family:'Space Grotesk',sans-serif; font-size:26px; font-weight:700;}
+  .ring-label .max{font-size:10px; color:var(--text-faint); font-family:'IBM Plex Mono',monospace;}
+  .score-meta h3{font-size:13px; color:var(--text-dim); font-weight:500; margin-bottom:6px; text-transform:uppercase; letter-spacing:0.03em;}
+  .score-band{display:inline-flex; align-items:center; gap:6px; font-family:'IBM Plex Mono',monospace; font-size:12.5px; font-weight:600; padding:3px 10px; border-radius:100px; margin-bottom:6px;}
+  .score-desc{font-size:12px; color:var(--text-faint); line-height:1.5; max-width:220px;}
+
+  .stat-stack{padding:18px 20px; display:flex; flex-direction:column; gap:14px; justify-content:center;}
+  .stat-row{display:flex; align-items:center; justify-content:space-between;}
+  .stat-row .lbl{font-size:12.5px; color:var(--text-dim);}
+  .stat-row .val{font-family:'Space Grotesk',sans-serif; font-size:19px; font-weight:700;}
+  .stat-row .val small{font-family:'Inter',sans-serif; font-size:11px; color:var(--text-faint); font-weight:400;}
+  .stat-divider{height:1px; background:var(--border-soft);}
+
+  /* ---------- HEATMAP ---------- */
+  .heatmap{display:grid; grid-template-columns:repeat(4,1fr); gap:12px;}
+  @media(max-width:760px){.heatmap{grid-template-columns:repeat(2,1fr);}}
+  .heat-cell{padding:16px; border-radius:12px; position:relative; overflow:hidden; border:1px solid var(--border);}
+  .heat-cell .hc-top{display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;}
+  .heat-cell .hc-name{font-size:13px; font-weight:600;}
+  .heat-cell .hc-val{font-family:'IBM Plex Mono',monospace; font-size:12px; font-weight:600;}
+  .heat-bar{height:6px; border-radius:4px; background:rgba(255,255,255,0.06); overflow:hidden;}
+  .heat-bar-fill{height:100%; border-radius:4px;}
+  .heat-cell .hc-sub{font-size:11px; color:var(--text-faint); margin-top:8px;}
+
+  /* ---------- RANKING ---------- */
+  .rank-list{display:flex; flex-direction:column; gap:10px;}
+  .rank-item{display:grid; grid-template-columns:28px 160px 1fr 60px; align-items:center; gap:14px; padding:13px 16px; background:var(--surface); border:1px solid var(--border); border-radius:10px;}
+  @media(max-width:700px){.rank-item{grid-template-columns:24px 100px 1fr 46px; gap:8px; padding:10px 12px;}}
+  .rank-num{font-family:'IBM Plex Mono',monospace; color:var(--text-faint); font-size:13px;}
+  .rank-name{font-weight:600; font-size:13.5px;}
+  .rank-name .sub{display:block; font-weight:400; font-size:11px; color:var(--text-faint); margin-top:2px;}
+  .rank-bar-track{height:8px; background:rgba(255,255,255,0.05); border-radius:5px; overflow:hidden;}
+  .rank-bar-fill{height:100%; border-radius:5px; background:linear-gradient(90deg, var(--blue), var(--cyan));}
+  .rank-pct{font-family:'IBM Plex Mono',monospace; font-size:12px; text-align:right; color:var(--text-dim);}
+
+  /* ---------- MATRIX ---------- */
+  .matrix-scroll{overflow-x:auto; border:1px solid var(--border); border-radius:14px;}
+  table.matrix{width:100%; border-collapse:collapse; min-width:760px;}
+  table.matrix th, table.matrix td{padding:12px 14px; text-align:center; font-size:12px; border-bottom:1px solid var(--border-soft); white-space:nowrap;}
+  table.matrix th{background:var(--surface-2); font-family:'IBM Plex Mono',monospace; font-weight:500; color:var(--text-dim); text-transform:uppercase; font-size:10.5px; letter-spacing:0.03em;}
+  table.matrix td:first-child, table.matrix th:first-child{text-align:left; position:sticky; left:0; background:var(--surface); font-weight:600; color:var(--text); z-index:2;}
+  table.matrix th:first-child{background:var(--surface-2); z-index:3;}
+  .lvl{display:inline-block; padding:3px 9px; border-radius:100px; font-family:'IBM Plex Mono',monospace; font-size:10.5px; font-weight:600;}
+  .lvl-high{background:rgba(239,91,91,0.12); color:var(--red);}
+  .lvl-med{background:rgba(245,166,35,0.12); color:var(--amber);}
+  .lvl-low{background:rgba(61,220,132,0.12); color:var(--green);}
+  .lvl-none{color:var(--text-faint);}
+
+  /* ---------- RADAR ---------- */
+  .radar-wrap{display:grid; grid-template-columns:1fr 1fr; gap:24px; align-items:center;}
+  @media(max-width:800px){.radar-wrap{grid-template-columns:1fr;}}
+  .radar-legend{display:flex; flex-direction:column; gap:12px;}
+  .radar-legend-item{display:flex; justify-content:space-between; align-items:center; padding:12px 14px; background:var(--surface-2); border-radius:10px; border:1px solid var(--border-soft);}
+  .radar-legend-item .name{font-size:12.5px; font-weight:500;}
+  .radar-legend-item .score{font-family:'IBM Plex Mono',monospace; font-size:13px; font-weight:700; color:var(--cyan);}
+
+  /* ---------- TWIN PROFILE ---------- */
+  .twin-grid{display:grid; grid-template-columns:repeat(2,1fr); gap:14px;}
+  @media(max-width:760px){.twin-grid{grid-template-columns:1fr;}}
+  .twin-card{padding:16px 18px; display:flex; flex-direction:column; gap:8px;}
+  .twin-card .th-row{display:flex; justify-content:space-between; align-items:center;}
+  .twin-card .th-title{font-size:12.5px; font-weight:600; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.02em;}
+  .twin-card .th-body{font-size:14px; line-height:1.55;}
+  .conf-bar{display:flex; align-items:center; gap:8px; margin-top:4px;}
+  .conf-track{flex:1; height:5px; background:rgba(255,255,255,0.06); border-radius:4px; overflow:hidden;}
+  .conf-fill{height:100%; background:linear-gradient(90deg, var(--purple), var(--blue)); border-radius:4px;}
+  .conf-label{font-family:'IBM Plex Mono',monospace; font-size:10.5px; color:var(--text-faint); white-space:nowrap;}
+
+  /* ---------- ASSETS ---------- */
+  .assets-grid{display:grid; grid-template-columns:repeat(3,1fr); gap:14px;}
+  @media(max-width:900px){.assets-grid{grid-template-columns:1fr 1fr;}}
+  @media(max-width:600px){.assets-grid{grid-template-columns:1fr;}}
+  .asset-card{padding:18px; display:flex; flex-direction:column; gap:10px; position:relative;}
+  .asset-rank{position:absolute; top:14px; right:16px; font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--text-faint);}
+  .asset-icon{width:34px; height:34px; border-radius:9px; display:flex; align-items:center; justify-content:center; font-size:16px; background:rgba(79,216,232,0.1); border:1px solid rgba(79,216,232,0.25);}
+  .asset-title{font-size:13.5px; font-weight:600;}
+  .asset-desc{font-size:12px; color:var(--text-faint); line-height:1.5;}
+  .asset-sources{font-family:'IBM Plex Mono',monospace; font-size:10.5px; color:var(--cyan); margin-top:2px;}
+
+  /* ---------- SIMULATOR ---------- */
+  .sim-wrap{display:grid; grid-template-columns:1fr 300px; gap:20px;}
+  @media(max-width:820px){.sim-wrap{grid-template-columns:1fr;}}
+  .sim-list{display:flex; flex-direction:column; gap:10px;}
+  .sim-item{display:flex; align-items:center; gap:14px; padding:14px 16px; background:var(--surface); border:1px solid var(--border); border-radius:10px; cursor:pointer; transition:border-color .15s ease;}
+  .sim-item:hover{border-color:rgba(79,216,232,0.35);}
+  .sim-check{width:20px; height:20px; border-radius:6px; border:1.5px solid var(--border); flex-shrink:0; display:flex; align-items:center; justify-content:center; font-size:12px; transition:all .15s ease;}
+  .sim-item.active .sim-check{background:var(--green); border-color:var(--green); color:#06170d;}
+  .sim-text{flex:1;}
+  .sim-text .t{font-size:13px; font-weight:600;}
+  .sim-text .d{font-size:11.5px; color:var(--text-faint); margin-top:2px;}
+  .sim-impact{font-family:'IBM Plex Mono',monospace; font-size:12.5px; color:var(--green); font-weight:600; white-space:nowrap;}
+  .sim-result{padding:22px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:10px; text-align:center;}
+  .sim-result .lbl{font-size:11.5px; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.04em;}
+  .sim-result .big{font-family:'Space Grotesk',sans-serif; font-size:44px; font-weight:700; color:var(--green);}
+  .sim-result .delta{font-family:'IBM Plex Mono',monospace; font-size:13px; color:var(--text-dim);}
+
+  /* ---------- VERDICT ---------- */
+  .verdict{padding:26px 28px; background:linear-gradient(135deg, rgba(79,216,232,0.06), rgba(91,141,239,0.03)); border:1px solid rgba(79,216,232,0.2);}
+  .verdict h3{font-family:'Space Grotesk',sans-serif; font-size:16px; margin-bottom:12px;}
+  .verdict p{font-size:13.5px; line-height:1.7; color:var(--text-dim); margin-bottom:10px;}
+  .verdict p:last-child{margin-bottom:0;}
+  .verdict b{color:var(--text);}
+
+  footer{margin-top:50px; text-align:center; font-size:11px; color:var(--text-faint); font-family:'IBM Plex Mono',monospace;}
+</style>
+
+<div class="scanlines"></div>
+<div class="wrap">
+
+  <div class="topbar">
+    <div class="brand">
+      <div class="brand-mark">DF</div>
+      <div class="brand-text">
+        <h1>Digital Footprint &amp; Privacy Exposure Report</h1>
+        <span>SCAN ID: DF-2026-0701 &nbsp;·&nbsp; BASED ON 15 REPORTED SERVICES</span>
+      </div>
+    </div>
+    <div class="scan-status"><span class="scan-dot"></span>ANALYSIS COMPLETE</div>
+  </div>
+
+  <div class="disclaimer">
+    <b>How to read this report:</b> Every score, ranking, and trait below is generated only from the 15 services you listed as Facts. Anything describing behavior, demographics, lifestyle, or habits is a labeled <b>Estimate</b> — a reasonable inference, not a certainty. This report does not access any private company database, real account data, or third-party tracking records. It cannot and does not claim to know what any company actually collected about you.
+  </div>
+
+  <!-- SCORES -->
+  <div class="section">
+    <div class="scores-grid">
+      <div class="card score-card">
+        <div class="ring-wrap">
+          <svg width="104" height="104" viewBox="0 0 104 104">
+            <circle cx="52" cy="52" r="45" fill="none" stroke="#1C2531" stroke-width="9"/>
+            <circle cx="52" cy="52" r="45" fill="none" stroke="url(#gradFoot)" stroke-width="9" stroke-linecap="round"
+              stroke-dasharray="282.7" stroke-dashoffset="62.2"/>
+            <defs><linearGradient id="gradFoot" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0%" stop-color="#F5A623"/><stop offset="100%" stop-color="#EF5B5B"/>
+            </linearGradient></defs>
+          </svg>
+          <div class="ring-label"><span class="num">78</span><span class="max">/ 100</span></div>
+        </div>
+        <div class="score-meta">
+          <h3>Digital Footprint Score</h3>
+          <div class="score-band" style="background:rgba(245,166,35,0.12); color:#F5A623;">🟠 Significant (61–80)</div>
+          <div class="score-desc">Broad presence across social, messaging, gaming, shopping, finance, and search — one of the wider footprints in this scoring model.</div>
+        </div>
+      </div>
+
+      <div class="card score-card">
+        <div class="ring-wrap">
+          <svg width="104" height="104" viewBox="0 0 104 104">
+            <circle cx="52" cy="52" r="45" fill="none" stroke="#1C2531" stroke-width="9"/>
+            <circle cx="52" cy="52" r="45" fill="none" stroke="url(#gradPriv)" stroke-width="9" stroke-linecap="round"
+              stroke-dasharray="282.7" stroke-dashoffset="175.3" id="privRing"/>
+            <defs><linearGradient id="gradPriv" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0%" stop-color="#EF5B5B"/><stop offset="100%" stop-color="#F5A623"/>
+            </linearGradient></defs>
+          </svg>
+          <div class="ring-label"><span class="num" id="privNum">38</span><span class="max">/ 100</span></div>
+        </div>
+        <div class="score-meta">
+          <h3>Privacy Score</h3>
+          <div class="score-band" id="privBand" style="background:rgba(245,166,35,0.12); color:#F5A623;">🟠 Fair (31–60)</div>
+          <div class="score-desc" id="privDesc">Ecosystem concentration and payment/search exposure pull this down. Try the Privacy Improvement Simulator below.</div>
+        </div>
+      </div>
+
+      <div class="card stat-stack">
+        <div class="stat-row"><span class="lbl">Total Services Used</span><span class="val">15 <small>fact</small></span></div>
+        <div class="stat-divider"></div>
+        <div class="stat-row"><span class="lbl">Parent Companies</span><span class="val">11 <small>inferred</small></span></div>
+        <div class="stat-divider"></div>
+        <div class="stat-row"><span class="lbl">Ecosystem Concentration</span><span class="val">65<small>/100</small></span></div>
+        <div class="stat-divider"></div>
+        <div class="stat-row"><span class="lbl">Est. Tracking Surface</span><span class="val">High <small>estimate</small></span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- HEATMAP -->
+  <div class="section">
+    <div class="section-head">
+      <h2>Exposure Heatmap</h2>
+      <span class="estimate-pill">● Estimate</span>
+    </div>
+    <div class="heatmap" id="heatmap"></div>
+  </div>
+
+  <!-- COMPANY RANKING -->
+  <div class="section">
+    <div class="section-head">
+      <h2>Company Exposure Ranking</h2>
+      <span class="fact-pill">● Parent companies inferred from Facts</span>
+    </div>
+    <div class="rank-list" id="rankList"></div>
+  </div>
+
+  <!-- DATA COLLECTION MATRIX -->
+  <div class="section">
+    <div class="section-head">
+      <h2>Data Collection Matrix</h2>
+      <span class="estimate-pill">● Estimate — typical data categories per platform type</span>
+    </div>
+    <div class="matrix-scroll">
+      <table class="matrix" id="matrixTable"></table>
+    </div>
+  </div>
+
+  <!-- RISK RADAR -->
+  <div class="section">
+    <div class="section-head">
+      <h2>Risk Radar</h2>
+      <span class="estimate-pill">● Estimate</span>
+    </div>
+    <div class="card" style="padding:24px;">
+      <div class="radar-wrap">
+        <svg viewBox="0 0 300 300" id="radarSvg"></svg>
+        <div class="radar-legend" id="radarLegend"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- DIGITAL TWIN -->
+  <div class="section">
+    <div class="section-head">
+      <h2>Digital Twin Profile</h2>
+      <span class="estimate-pill">● Estimate — inferred lifestyle signals only</span>
+    </div>
+    <div class="twin-grid" id="twinGrid"></div>
+  </div>
+
+  <!-- ASSETS -->
+  <div class="section">
+    <div class="section-head">
+      <h2>Most Valuable Data Assets</h2>
+      <span class="estimate-pill">● Estimate — ranked by commercial value</span>
+    </div>
+    <div class="assets-grid" id="assetsGrid"></div>
+  </div>
+
+  <!-- SIMULATOR -->
+  <div class="section">
+    <div class="section-head">
+      <h2>Privacy Improvement Simulator</h2>
+      <span class="tag">Interactive · toggle actions to see projected impact</span>
+    </div>
+    <div class="sim-wrap">
+      <div class="sim-list" id="simList"></div>
+      <div class="card sim-result">
+        <span class="lbl">Projected Privacy Score</span>
+        <span class="big" id="simScore">38</span>
+        <span class="delta" id="simDelta">+0 from baseline</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- FINAL VERDICT -->
+  <div class="section">
+    <div class="card verdict">
+      <h3>Final Verdict</h3>
+      <p><b>Fact:</b> Your reported footprint spans 15 services across 11 inferred parent companies, with <b>Alphabet/Google</b> holding the largest single share (4 services: Search, YouTube, Pay, Photos) — giving one company an unusually complete cross-category view of search intent, entertainment, payments, and media.</p>
+      <p><b>Estimate:</b> The combination of social, messaging, gaming, and commerce apps suggests a mobile-first, entertainment- and social-heavy usage pattern, with a plausible younger or mixed-age household profile — this is inferred, not confirmed.</p>
+      <p><b>Estimate:</b> Overall exposure is <b>Significant</b> mainly due to breadth and ecosystem concentration rather than any single risky app. The fastest privacy gains come from reducing ad personalization on the Google and Meta accounts and separating payment activity from social/search activity where possible.</p>
+    </div>
+  </div>
+
+  <footer>This report is generated entirely from user-declared service usage. No private, third-party, or account-level data was accessed. All non-factual conclusions are estimates and may not reflect reality.</footer>
+</div>
+
+<script>
+  // ---------- DATA ----------
+  const heat = [
+    {name:"Social Media", val:88, sub:"Instagram, Snapchat, TikTok"},
+    {name:"Search", val:82, sub:"Google Search"},
+    {name:"Finance", val:78, sub:"Google Pay"},
+    {name:"Social Graph / Video", val:65, sub:"YouTube"},
+    {name:"Shopping", val:60, sub:"Amazon, Meesho"},
+    {name:"Messaging", val:55, sub:"WhatsApp, iMessage, Discord"},
+    {name:"Cloud / Media", val:58, sub:"Google Photos"},
+    {name:"Gaming", val:50, sub:"Roblox, PUBG Mobile"},
+  ];
+  function heatColor(v){
+    if(v>=75) return "#EF5B5B";
+    if(v>=55) return "#F5A623";
+    return "#3DDC84";
+  }
+  document.getElementById('heatmap').innerHTML = heat.map(h=>`
+    <div class="heat-cell" style="background:linear-gradient(180deg, ${heatColor(h.val)}14, transparent);">
+      <div class="hc-top"><span class="hc-name">${h.name}</span><span class="hc-val" style="color:${heatColor(h.val)}">${h.val}</span></div>
+      <div class="heat-bar"><div class="heat-bar-fill" style="width:${h.val}%; background:${heatColor(h.val)};"></div></div>
+      <div class="hc-sub">${h.sub}</div>
+    </div>
+  `).join('');
+
+  const companies = [
+    {name:"Alphabet / Google", sub:"Search, YouTube, Google Pay, Google Photos", pct:92},
+    {name:"Meta", sub:"Instagram, WhatsApp", pct:70},
+    {name:"ByteDance", sub:"TikTok", pct:58},
+    {name:"Snap Inc.", sub:"Snapchat", pct:52},
+    {name:"Amazon", sub:"Amazon", pct:48},
+    {name:"Discord Inc.", sub:"Discord", pct:34},
+    {name:"Apple", sub:"iMessage", pct:30},
+    {name:"Krafton", sub:"PUBG Mobile", pct:28},
+    {name:"Roblox Corporation", sub:"Roblox", pct:27},
+    {name:"Spotify", sub:"Spotify", pct:24},
+    {name:"Meesho", sub:"Meesho", pct:22},
+  ];
+  document.getElementById('rankList').innerHTML = companies.map((c,i)=>`
+    <div class="rank-item">
+      <span class="rank-num">${String(i+1).padStart(2,'0')}</span>
+      <span class="rank-name">${c.name}<span class="sub">${c.sub}</span></span>
+      <div class="rank-bar-track"><div class="rank-bar-fill" style="width:${c.pct}%;"></div></div>
+      <span class="rank-pct">${c.pct}</span>
+    </div>
+  `).join('');
+
+  const matrixCols = ["Location","Contacts","Payments","Browsing/Search","Media","Social Graph","Voice/Biometric"];
+  const matrixRows = [
+    {name:"Alphabet / Google", vals:["High","Med","High","High","High","Med","Med"]},
+    {name:"Meta", vals:["Med","High","Low","Med","High","High","Low"]},
+    {name:"ByteDance", vals:["Med","Med","Low","High","High","High","Med"]},
+    {name:"Snap Inc.", vals:["High","Med","Low","Low","High","High","Low"]},
+    {name:"Amazon", vals:["Med","Low","High","High","Low","Low","Low"]},
+    {name:"Discord Inc.", vals:["Low","Med","Low","Low","Med","Med","Med"]},
+    {name:"Apple", vals:["Low","Med","Low","Low","Low","Low","Low"]},
+    {name:"Spotify", vals:["Low","Low","Med","Med","Low","Low","Low"]},
+    {name:"Roblox Corp.", vals:["Low","Low","Med","Low","Med","Med","Low"]},
+    {name:"Krafton", vals:["Med","Low","Med","Low","Low","Low","Low"]},
+    {name:"Meesho", vals:["Med","Low","Med","Med","Low","Low","Low"]},
+  ];
+  function lvlClass(v){
+    if(v==="High") return "lvl-high";
+    if(v==="Med") return "lvl-med";
+    if(v==="Low") return "lvl-low";
+    return "lvl-none";
+  }
+  let matrixHtml = "<tr><th>Company</th>" + matrixCols.map(c=>`<th>${c}</th>`).join('') + "</tr>";
+  matrixRows.forEach(r=>{
+    matrixHtml += `<tr><td>${r.name}</td>` + r.vals.map(v=>`<td><span class="lvl ${lvlClass(v)}">${v}</span></td>`).join('') + "</tr>";
+  });
+  document.getElementById('matrixTable').innerHTML = matrixHtml;
+
+  const radar = [
+    {name:"Behavioral Profiling", val:85},
+    {name:"Social Graph Mapping", val:80},
+    {name:"Identity Exposure", val:75},
+    {name:"Financial Exposure", val:70},
+    {name:"Location Tracking", val:65},
+    {name:"Youth-Platform Exposure", val:55},
+  ];
+  (function drawRadar(){
+    const cx=150, cy=150, R=105, n=radar.length;
+    const angle = i => (Math.PI*2*i/n) - Math.PI/2;
+    let svg = "";
+    // grid rings
+    [0.25,0.5,0.75,1].forEach(f=>{
+      let pts = radar.map((_,i)=>{
+        const a=angle(i); const r=R*f;
+        return `${cx+r*Math.cos(a)},${cy+r*Math.sin(a)}`;
+      }).join(' ');
+      svg += `<polygon points="${pts}" fill="none" stroke="#212B38" stroke-width="1"/>`;
+    });
+    // axis lines + labels
+    radar.forEach((d,i)=>{
+      const a=angle(i);
+      const x2=cx+R*Math.cos(a), y2=cy+R*Math.sin(a);
+      svg += `<line x1="${cx}" y1="${cy}" x2="${x2}" y2="${y2}" stroke="#212B38" stroke-width="1"/>`;
+    });
+    // data polygon
+    let dataPts = radar.map((d,i)=>{
+      const a=angle(i); const r=R*(d.val/100);
+      return `${cx+r*Math.cos(a)},${cy+r*Math.sin(a)}`;
+    }).join(' ');
+    svg += `<polygon points="${dataPts}" fill="rgba(79,216,232,0.18)" stroke="#4FD8E8" stroke-width="2"/>`;
+    radar.forEach((d,i)=>{
+      const a=angle(i); const r=R*(d.val/100);
+      const x=cx+r*Math.cos(a), y=cy+r*Math.sin(a);
+      svg += `<circle cx="${x}" cy="${y}" r="3.5" fill="#4FD8E8"/>`;
+    });
+    document.getElementById('radarSvg').innerHTML = svg;
+  })();
+  document.getElementById('radarLegend').innerHTML = radar.map(r=>`
+    <div class="radar-legend-item"><span class="name">${r.name}</span><span class="score">${r.val}</span></div>
+  `).join('');
+
+  const twins = [
+    {title:"Age Range Signal", body:"The mix of Roblox, PUBG Mobile, Snapchat, and TikTok is commonly seen among teen and young-adult users, though these apps are also used broadly across age groups.", conf:45},
+    {title:"Geography / Market Signal", body:"Meesho's presence alongside Amazon and Google Pay is a pattern more common among users in India and similar mobile-commerce-first markets.", conf:55},
+    {title:"Spending Behavior Signal", body:"Using both a value-focused marketplace (Meesho) and a full-service one (Amazon) suggests price-comparison habits, but purchase frequency and amounts cannot be inferred.", conf:35},
+    {title:"Communication Style Signal", body:"Running WhatsApp, iMessage, and Discord together suggests fragmented, context-based messaging — family/casual on WhatsApp, community chat on Discord.", conf:40},
+    {title:"Entertainment Signal", body:"YouTube plus Spotify suggests regular video and audio media consumption; exact genres or amount of time spent cannot be determined.", conf:50},
+    {title:"Financial Digitization Signal", body:"Google Pay usage indicates comfort with mobile/UPI-style digital payments, a strong general market signal in mobile-payment-heavy regions.", conf:60},
+  ];
+  document.getElementById('twinGrid').innerHTML = twins.map(t=>`
+    <div class="card twin-card">
+      <div class="th-row"><span class="th-title">${t.title}</span><span class="estimate-pill">Estimate</span></div>
+      <div class="th-body">${t.body}</div>
+      <div class="conf-bar"><div class="conf-track"><div class="conf-fill" style="width:${t.conf}%;"></div></div><span class="conf-label">${t.conf}% confidence</span></div>
+    </div>
+  `).join('');
+
+  const assets = [
+    {icon:"💳", title:"Payment & Transaction Behavior", desc:"Spending patterns and merchant interactions inferred from Google Pay activity.", src:"Google Pay"},
+    {icon:"🔎", title:"Search Intent History", desc:"What you look for, when, and how often — one of the highest-value ad-targeting signals.", src:"Google Search"},
+    {icon:"🧑‍🤝‍🧑", title:"Social Graph & Interests", desc:"Who you interact with and what content keeps you engaged.", src:"Instagram, TikTok, Snapchat"},
+    {icon:"💬", title:"Communication Metadata", desc:"Who you talk to and how often — not message content, but contact patterns.", src:"WhatsApp, iMessage, Discord"},
+    {icon:"🖼️", title:"Personal Media Library", desc:"Photos and videos, often with location and device metadata attached.", src:"Google Photos"},
+    {icon:"🛍️", title:"Shopping Behavior", desc:"Browsing and purchase habits across a premium and a value-tier marketplace.", src:"Amazon, Meesho"},
+    {icon:"🎮", title:"Gaming & Youth-Adjacent Activity", desc:"In-game behavior and possible age-related signals from gaming platforms.", src:"Roblox, PUBG Mobile"},
+  ];
+  document.getElementById('assetsGrid').innerHTML = assets.map((a,i)=>`
+    <div class="card asset-card">
+      <span class="asset-rank">#${i+1}</span>
+      <div class="asset-icon">${a.icon}</div>
+      <div class="asset-title">${a.title}</div>
+      <div class="asset-desc">${a.desc}</div>
+      <div class="asset-sources">${a.src}</div>
+    </div>
+  `).join('');
+
+  // ---------- SIMULATOR ----------
+  const actions = [
+    {t:"Limit ad personalization (Google & Meta)", d:"Turn off ad personalization in Google and Meta account settings.", impact:12},
+    {t:"Reduce app permissions", d:"Revoke location, contacts, and mic access for apps that don't need them.", impact:9},
+    {t:"Enable 2FA everywhere", d:"Add two-factor authentication to Google, Meta, and payment accounts.", impact:8},
+    {t:"Separate payments from social/search", d:"Avoid linking Google Pay identity closely with social/search activity.", impact:7},
+    {t:"Consolidate messaging apps", d:"Reduce metadata spread by standardizing on fewer messaging platforms.", impact:5},
+    {t:"Use privacy-focused search for sensitive queries", d:"Route sensitive searches away from your primary Google account.", impact:6},
+  ];
+  const baseline = 38;
+  let simHtml = "";
+  actions.forEach((a,i)=>{
+    simHtml += `<div class="sim-item" data-impact="${a.impact}" onclick="toggleSim(this)">
+      <div class="sim-check"></div>
+      <div class="sim-text"><div class="t">${a.t}</div><div class="d">${a.d}</div></div>
+      <div class="sim-impact">+${a.impact}</div>
+    </div>`;
+  });
+  document.getElementById('simList').innerHTML = simHtml;
+
+  function recalcSim(){
+    let total = baseline;
+    document.querySelectorAll('.sim-item.active').forEach(el=>{
+      total += parseInt(el.dataset.impact,10);
+    });
+    total = Math.min(total, 100);
+    document.getElementById('simScore').textContent = total;
+    document.getElementById('simDelta').textContent = (total-baseline>=0?'+':'') + (total-baseline) + ' from baseline';
+
+    // update privacy ring + band too
+    const circumference = 282.7;
+    const offset = circumference - (circumference*total/100);
+    document.getElementById('privRing').setAttribute('stroke-dashoffset', offset);
+    document.getElementById('privNum').textContent = total;
+    const band = document.getElementById('privBand');
+    const desc = document.getElementById('privDesc');
+    if(total<=30){ band.style.background='rgba(239,91,91,0.12)'; band.style.color='#EF5B5B'; band.innerHTML='🔴 Weak (0–30)'; }
+    else if(total<=60){ band.style.background='rgba(245,166,35,0.12)'; band.style.color='#F5A623'; band.innerHTML='🟠 Fair (31–60)'; }
+    else if(total<=80){ band.style.background='rgba(79,216,232,0.12)'; band.style.color='#4FD8E8'; band.innerHTML='🟡 Good (61–80)'; }
+    else { band.style.background='rgba(61,220,132,0.12)'; band.style.color='#3DDC84'; band.innerHTML='🟢 Strong (81–100)'; }
+    desc.textContent = total>baseline ? "Projected score if the checked actions above were applied. This is a simulation, not a live account change." : "Ecosystem concentration and payment/search exposure pull this down. Try the Privacy Improvement Simulator below.";
+  }
+  function toggleSim(el){
+    el.classList.toggle('active');
+    el.querySelector('.sim-check').innerHTML = el.classList.contains('active') ? '✓' : '';
+    recalcSim();
+  }
+</script>

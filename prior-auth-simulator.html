@@ -1,0 +1,1245 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Prior Authorization Workflow Simulator</title>
+<style>
+/* ======================================================================
+   DESIGN TOKENS
+   Palette is deliberately restricted to shades of blue plus near-black
+   text and white/paper surfaces, per the brief. Approval / pend / denial
+   are distinguished by ink-stamp iconography and shape (not hue) rather
+   than red/green, echoing the look of an actual carbon-copy insurance
+   form stamped in blue ballpoint ink.
+   ====================================================================== */
+:root{
+  --ink:        #0b1220;   /* near-black body text */
+  --paper:      #eaf2fb;   /* page background, palest blue */
+  --card:       #ffffff;   /* card surfaces */
+  --lane-patient:  #dfeefc;
+  --lane-provider: #cfe4f8;
+  --lane-payer:    #bdd8f2;
+  --line:       #9dbcdd;   /* hairline borders */
+  --deep:       #0f3d6e;   /* deep blue - headers, primary */
+  --mid:        #2969a3;   /* mid blue - secondary actions */
+  --bright:     #3f8fe0;   /* bright blue - active / highlight */
+  --pale:       #f3f8fd;
+  --stamp-navy: #12335c;
+  --shadow:     0 6px 18px rgba(15,61,110,0.18);
+  --radius:     10px;
+
+  --font-form:  "Arial Narrow", "Helvetica Neue Condensed", "Helvetica Neue", Arial, sans-serif;
+  --font-body:  -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --font-mono:  "Consolas", "Menlo", "Courier New", monospace;
+}
+
+*{ box-sizing:border-box; }
+html,body{ height:100%; }
+body{
+  margin:0;
+  background:
+    linear-gradient(180deg, var(--paper), #dceafb 70%);
+  color:var(--ink);
+  font-family:var(--font-body);
+  -webkit-font-smoothing:antialiased;
+  min-height:100vh;
+}
+
+/* Respect reduced motion preference */
+@media (prefers-reduced-motion: reduce){
+  *{ animation-duration:0.001ms !important; animation-iteration-count:1 !important; transition-duration:0.001ms !important; }
+}
+
+.app{ max-width:1280px; margin:0 auto; padding:18px 20px 60px; }
+
+/* ---------------------------------------------------------------------
+   TOP BAR + HUD
+   --------------------------------------------------------------------- */
+.topbar{
+  display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between;
+  gap:14px; margin-bottom:18px;
+}
+.topbar h1{
+  font-family:var(--font-form);
+  font-weight:800;
+  letter-spacing:0.5px;
+  font-size:clamp(20px,3vw,30px);
+  color:var(--deep);
+  margin:0;
+  text-transform:uppercase;
+}
+.topbar h1 span{ display:block; font-family:var(--font-mono); font-size:12px; letter-spacing:2px; color:var(--mid); text-transform:none; font-weight:600; margin-top:2px;}
+
+.hud{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+.hud-item{
+  background:var(--card);
+  border:1px solid var(--line);
+  border-radius:8px;
+  padding:8px 14px;
+  font-family:var(--font-mono);
+  font-size:13px;
+  color:var(--ink);
+  box-shadow:var(--shadow);
+  min-width:120px;
+  text-align:center;
+}
+.hud-item b{ display:block; font-family:var(--font-form); font-size:11px; letter-spacing:1px; color:var(--mid); text-transform:uppercase; font-weight:700; margin-bottom:2px;}
+.hud-item .val{ font-size:18px; font-weight:700; color:var(--deep); }
+
+button{
+  font-family:var(--font-form);
+  font-weight:700;
+  letter-spacing:0.3px;
+  cursor:pointer;
+  border-radius:8px;
+  border:1px solid var(--deep);
+  transition:transform .12s ease, box-shadow .12s ease, background .15s ease;
+}
+button:focus-visible, .zone:focus-visible, .chip:focus-visible{
+  outline:3px solid var(--bright);
+  outline-offset:2px;
+}
+button:active{ transform:translateY(1px); }
+
+.btn-primary{ background:var(--deep); color:#fff; padding:10px 18px; font-size:13px; text-transform:uppercase;}
+.btn-primary:hover{ background:var(--mid); box-shadow:0 4px 10px rgba(15,61,110,.3);}
+.btn-secondary{ background:#fff; color:var(--deep); padding:9px 16px; font-size:13px; text-transform:uppercase;}
+.btn-secondary:hover{ background:var(--pale); }
+.btn-ghost{ background:transparent; border-color:var(--line); color:var(--mid); padding:8px 14px; font-size:12px;}
+
+#restartBtn{ background:var(--stamp-navy); color:#fff; padding:10px 16px; font-size:12px; text-transform:uppercase;}
+#restartBtn:hover{ background:var(--deep); }
+
+/* ---------------------------------------------------------------------
+   PROGRESS TRACKER
+   Numbering is meaningful here: PA is a genuine linear/sequential
+   real-world process, so ordered step numbers communicate real info.
+   --------------------------------------------------------------------- */
+.tracker{
+  list-style:none; margin:0 0 22px; padding:14px 16px;
+  display:flex; overflow-x:auto; gap:0;
+  background:var(--card); border:1px solid var(--line); border-radius:var(--radius);
+  box-shadow:var(--shadow);
+}
+.tracker li{
+  flex:1 1 0; min-width:110px;
+  display:flex; flex-direction:column; align-items:center; text-align:center;
+  position:relative; padding:0 6px;
+  font-family:var(--font-form); font-size:11px; letter-spacing:.4px;
+  color:var(--mid); text-transform:uppercase; font-weight:700;
+}
+.tracker li::before{
+  content:attr(data-step);
+  width:28px; height:28px; border-radius:50%;
+  background:#fff; border:2px solid var(--line);
+  color:var(--mid);
+  display:flex; align-items:center; justify-content:center;
+  font-family:var(--font-mono); font-weight:700; font-size:13px;
+  margin-bottom:6px;
+  transition:all .2s ease;
+}
+.tracker li::after{
+  content:""; position:absolute; top:14px; left:-50%; width:100%; height:2px;
+  background:var(--line); z-index:-1;
+}
+.tracker li:first-child::after{ display:none; }
+.tracker li.done::before{ background:var(--deep); border-color:var(--deep); color:#fff; content:"✓";}
+.tracker li.done::after{ background:var(--deep); }
+.tracker li.current::before{ background:var(--bright); border-color:var(--bright); color:#fff; box-shadow:0 0 0 4px rgba(63,143,224,.25);}
+.tracker li.current{ color:var(--deep); }
+
+/* ---------------------------------------------------------------------
+   BOARD / LANES
+   --------------------------------------------------------------------- */
+.board{
+  display:grid;
+  grid-template-columns:repeat(3,1fr);
+  gap:16px;
+  margin-bottom:20px;
+}
+@media (max-width:880px){
+  .board{ grid-template-columns:1fr; }
+}
+.lane{
+  border-radius:var(--radius);
+  padding:14px;
+  border:1px solid var(--line);
+  min-height:420px;
+  display:flex; flex-direction:column; gap:12px;
+}
+.lane-patient{ background:var(--lane-patient); }
+.lane-provider{ background:var(--lane-provider); }
+.lane-payer{ background:var(--lane-payer); }
+
+.lane h2{
+  margin:0 0 2px; font-family:var(--font-form); text-transform:uppercase;
+  letter-spacing:1px; font-size:15px; color:var(--deep);
+  border-bottom:2px solid var(--deep); padding-bottom:6px;
+}
+
+.zone{
+  background:rgba(255,255,255,0.65);
+  border:2px dashed var(--line);
+  border-radius:8px;
+  padding:10px;
+  min-height:78px;
+  display:flex; flex-direction:column; gap:6px;
+  transition:background .15s ease, border-color .15s ease, box-shadow .15s ease;
+}
+.zone-label{
+  font-family:var(--font-form); font-weight:700; font-size:12px;
+  text-transform:uppercase; letter-spacing:.4px; color:var(--mid);
+}
+.zone-hint{ font-size:11px; color:var(--mid); font-style:italic; }
+.zone.zone-target{ border-color:var(--bright); background:rgba(255,255,255,.9); }
+.zone.zone-hover{ background:#fff; box-shadow:inset 0 0 0 2px var(--bright); }
+.zone.zone-disabled{ opacity:.45; }
+.zone.zone-slot{ align-items:flex-start; }
+.zone.shake{ animation:shake .35s ease; }
+@keyframes shake{
+  10%,90%{ transform:translateX(-2px);} 20%,80%{ transform:translateX(3px);}
+  30%,50%,70%{ transform:translateX(-5px);} 40%,60%{ transform:translateX(5px);}
+}
+
+.connector{ height:14px; width:2px; background:var(--line); margin:0 auto; }
+
+/* case card ("claim folder") -------------------------------------------------*/
+.case-card{
+  background:#fff;
+  border:1px solid var(--line);
+  border-left:6px solid var(--deep);
+  border-radius:6px;
+  padding:10px 12px;
+  box-shadow:0 3px 8px rgba(15,61,110,.18);
+  cursor:grab;
+  touch-action:none;
+  user-select:none;
+  width:100%;
+}
+.case-card.dragging{ cursor:grabbing; opacity:.92; box-shadow:0 12px 24px rgba(15,61,110,.35); }
+.case-card .tag{
+  font-family:var(--font-mono); font-size:10px; color:var(--mid);
+  text-transform:uppercase; letter-spacing:1px;
+}
+.case-card .name{ font-family:var(--font-form); font-weight:800; font-size:15px; color:var(--ink); margin:2px 0;}
+.case-card .meta{ font-size:11px; color:var(--mid); }
+.case-card .status-pill{
+  display:inline-block; margin-top:6px; padding:2px 8px; border-radius:20px;
+  font-family:var(--font-form); font-size:10px; text-transform:uppercase; font-weight:700;
+  background:var(--pale); color:var(--deep); border:1px solid var(--line);
+}
+
+/* doc chips ------------------------------------------------------------- */
+.chip{
+  display:inline-flex; align-items:center; gap:6px;
+  background:#fff; border:1px solid var(--line); border-radius:20px;
+  padding:6px 12px; font-size:12px; color:var(--ink);
+  cursor:grab; touch-action:none; user-select:none;
+  box-shadow:0 2px 4px rgba(15,61,110,.12);
+}
+.chip.required::before{ content:"required"; font-family:var(--font-mono); font-size:9px; color:#fff; background:var(--mid); padding:1px 5px; border-radius:4px; }
+.chip.optional::before{ content:"optional"; font-family:var(--font-mono); font-size:9px; color:var(--mid); background:var(--pale); padding:1px 5px; border-radius:4px; border:1px solid var(--line);}
+.chip.collected{ opacity:.4; cursor:default; text-decoration:line-through; }
+.chip.dragging{ opacity:.85; box-shadow:0 10px 20px rgba(15,61,110,.3); }
+
+/* ---------------------------------------------------------------------
+   EDUCATION PANEL
+   --------------------------------------------------------------------- */
+.edu-panel{
+  background:var(--card); border:1px solid var(--line); border-radius:var(--radius);
+  padding:16px 18px; box-shadow:var(--shadow);
+}
+.edu-panel h3{
+  margin:0 0 6px; font-family:var(--font-form); text-transform:uppercase; letter-spacing:1px;
+  font-size:13px; color:var(--mid);
+}
+.edu-panel h3::before{ content:"ℹ "; }
+.edu-panel p{ margin:0; line-height:1.5; font-size:14px; }
+
+/* ---------------------------------------------------------------------
+   MODALS
+   --------------------------------------------------------------------- */
+.modal-backdrop{
+  position:fixed; inset:0; background:rgba(11,18,32,.55);
+  display:none; align-items:center; justify-content:center; padding:20px; z-index:500;
+}
+.modal-backdrop.open{ display:flex; }
+.modal{
+  background:#fff; border-radius:14px; max-width:640px; width:100%;
+  max-height:88vh; overflow-y:auto; padding:26px 28px; box-shadow:0 20px 50px rgba(11,18,32,.4);
+  border-top:6px solid var(--deep);
+}
+.modal h2{ margin-top:0; font-family:var(--font-form); text-transform:uppercase; color:var(--deep); letter-spacing:.5px; }
+.modal p{ line-height:1.55; }
+.modal-actions{ display:flex; justify-content:flex-end; gap:10px; margin-top:20px; }
+
+.scenario-grid{ display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:14px;}
+@media (max-width:520px){ .scenario-grid{ grid-template-columns:1fr; } }
+.scenario-option{
+  text-align:left; background:var(--pale); border:1px solid var(--line); border-radius:10px;
+  padding:14px; cursor:pointer;
+}
+.scenario-option:hover{ background:#fff; border-color:var(--bright); }
+.scenario-option .icon{ font-size:26px; }
+.scenario-option .title{ font-family:var(--font-form); font-weight:800; color:var(--deep); font-size:14px; margin:6px 0 2px;}
+.scenario-option .desc{ font-size:12px; color:var(--mid); line-height:1.4;}
+
+.doc-pool, .doc-packet{
+  min-height:60px; border:2px dashed var(--line); border-radius:8px; padding:10px;
+  display:flex; flex-wrap:wrap; gap:8px; margin-top:8px; background:var(--pale);
+}
+.doc-packet.zone-hover{ background:#fff; box-shadow:inset 0 0 0 2px var(--bright); }
+.doc-progress{ font-family:var(--font-mono); font-size:12px; color:var(--mid); margin-top:6px;}
+
+/* stamp overlay ---------------------------------------------------------*/
+#stampOverlay{
+  position:fixed; inset:0; display:none; align-items:center; justify-content:center;
+  pointer-events:none; z-index:800;
+}
+#stampOverlay.show{ display:flex; }
+.stamp{
+  font-family:var(--font-form); font-weight:900; letter-spacing:3px;
+  font-size:44px; text-transform:uppercase; padding:14px 34px;
+  border:6px solid currentColor; border-radius:10px;
+  transform:rotate(-14deg) scale(2.4); opacity:0;
+  color:var(--deep);
+  background:rgba(255,255,255,.06);
+  mix-blend-mode:multiply;
+}
+.stamp.approve{ color:var(--deep); }
+.stamp.pend{ color:var(--mid); border-style:dashed; }
+.stamp.deny{ color:var(--stamp-navy); }
+.stamp.stamp-animate{ animation:stampDown .55s cubic-bezier(.2,.9,.3,1.2) forwards; }
+@keyframes stampDown{
+  0%{ transform:rotate(-14deg) scale(2.6); opacity:0; }
+  55%{ transform:rotate(-10deg) scale(0.94); opacity:1; }
+  70%{ transform:rotate(-11deg) scale(1.05); }
+  100%{ transform:rotate(-10deg) scale(1); opacity:1; }
+}
+
+/* confetti ---------------------------------------------------------------*/
+#confettiLayer{ position:fixed; inset:0; pointer-events:none; overflow:hidden; z-index:750; }
+.confetti-piece{
+  position:absolute; top:-20px; width:10px; height:14px; opacity:.9;
+  animation-name:confettiFall; animation-timing-function:linear; animation-fill-mode:forwards;
+}
+@keyframes confettiFall{
+  to{ transform:translateY(110vh) rotate(540deg); opacity:.3; }
+}
+
+/* summary ----------------------------------------------------------------*/
+.summary-stats{ display:grid; grid-template-columns:1fr 1fr; gap:10px; margin:16px 0;}
+.summary-stats div{ background:var(--pale); border:1px solid var(--line); border-radius:8px; padding:10px 12px;}
+.summary-stats b{ display:block; font-family:var(--font-form); font-size:11px; text-transform:uppercase; color:var(--mid);}
+.summary-stats span{ font-family:var(--font-mono); font-size:18px; color:var(--deep); font-weight:700;}
+.summary-log{ list-style:none; margin:10px 0 0; padding:0; font-size:13px; }
+.summary-log li{ padding:6px 0; border-bottom:1px solid var(--line); }
+.summary-log li:last-child{ border-bottom:none; }
+
+.visually-hidden{
+  position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap;
+}
+</style>
+</head>
+<body>
+
+<div class="app">
+
+  <header class="topbar">
+    <h1>Prior Authorization Simulator<span>CMS-PA-01 · Payer / Provider / Patient Workflow Trainer</span></h1>
+    <div class="hud">
+      <div class="hud-item"><b>Days Elapsed</b><span class="val" id="daysElapsed">0</span></div>
+      <div class="hud-item"><b>Efficiency</b><span class="val" id="efficiencyScore">100</span></div>
+      <button id="restartBtn" type="button">New Patient</button>
+    </div>
+  </header>
+
+  <ol class="tracker" id="tracker" aria-label="Workflow progress">
+    <li data-step="1">Scenario</li>
+    <li data-step="2">Necessity</li>
+    <li data-step="3">Documents</li>
+    <li data-step="4">Submission</li>
+    <li data-step="5">Payer Review</li>
+    <li data-step="6">Resolution</li>
+    <li data-step="7">Outcome</li>
+  </ol>
+
+  <main class="board">
+
+    <section class="lane lane-patient" data-lane="patient">
+      <h2>Patient</h2>
+      <div class="zone zone-slot" id="zone-select-scenario" data-stage="select-scenario">
+        <span class="zone-label">1 · Case Started</span>
+        <span class="zone-hint" id="scenarioHint">No case yet — start a new patient.</span>
+      </div>
+      <div class="connector"></div>
+      <div class="zone zone-slot" id="zone-outcome" data-stage="outcome">
+        <span class="zone-label">7 · Outcome Received</span>
+        <span class="zone-hint">Drag the case here once a final decision is stamped.</span>
+      </div>
+    </section>
+
+    <section class="lane lane-provider" data-lane="provider">
+      <h2>Provider</h2>
+      <div class="zone zone-slot" id="zone-necessity" data-stage="necessity">
+        <span class="zone-label">2 · Medical Necessity Evaluation</span>
+        <span class="zone-hint">Clinician reviews chart against payer medical policy.</span>
+      </div>
+      <div class="zone zone-slot" id="zone-documentation" data-stage="documentation">
+        <span class="zone-label">3 · Document Collection</span>
+        <span class="zone-hint">Gather the documents payers require for this request.</span>
+      </div>
+      <div class="zone zone-slot" id="zone-submit" data-stage="submit">
+        <span class="zone-label">4 · Submit to Payer</span>
+        <span class="zone-hint">Send the completed packet to the payer for review.</span>
+      </div>
+      <div class="zone zone-slot zone-disabled" id="zone-respond-pend" data-stage="respond-pend">
+        <span class="zone-label">6a · Respond to Pend</span>
+        <span class="zone-hint">Only active if the payer pends the request for more info.</span>
+      </div>
+      <div class="zone zone-slot zone-disabled" id="zone-appeal" data-stage="appeal">
+        <span class="zone-label">6b · Appeal / Peer-to-Peer</span>
+        <span class="zone-hint">Only active if the payer denies the request.</span>
+      </div>
+    </section>
+
+    <section class="lane lane-payer" data-lane="payer">
+      <h2>Payer</h2>
+      <div class="zone zone-slot" id="zone-payer-review" data-stage="payer-review">
+        <span class="zone-label">5 · Payer Review</span>
+        <span class="zone-hint">Utilization management screens the request.</span>
+      </div>
+      <div class="zone zone-slot zone-disabled" id="zone-payer-rereview" data-stage="payer-rereview">
+        <span class="zone-label">6c · Payer Re-Review</span>
+        <span class="zone-hint">Second look after a pend response or appeal.</span>
+      </div>
+    </section>
+
+  </main>
+
+  <aside class="edu-panel" aria-live="polite">
+    <h3>What's happening</h3>
+    <p id="eduText">Click "New Patient" or choose a scenario below to start your first case.</p>
+  </aside>
+
+</div>
+
+<!-- ============================= MODALS ============================= -->
+
+<div class="modal-backdrop" id="scenarioModalBackdrop">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="scenarioModalTitle">
+    <h2 id="scenarioModalTitle">Start a New Patient Case</h2>
+    <p>Choose the clinical scenario you want to walk through the prior authorization pipeline.</p>
+    <div class="scenario-grid" id="scenarioGrid"></div>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="docModalBackdrop">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="docModalTitle">
+    <h2 id="docModalTitle">Document Collection</h2>
+    <p id="docModalIntro"></p>
+    <div class="zone-label">Available documents (drag into the packet, or tap to add)</div>
+    <div class="doc-pool" id="docPool"></div>
+    <div class="zone-label" style="margin-top:12px;">Submission packet</div>
+    <div class="doc-packet" id="docPacket" data-stage="doc-packet"></div>
+    <p class="doc-progress" id="docProgress"></p>
+    <div class="modal-actions">
+      <button class="btn-secondary" type="button" id="docModalClose">Done for now</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="reviewModalBackdrop">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="reviewModalTitle">
+    <h2 id="reviewModalTitle">Payer Utilization Review</h2>
+    <p id="reviewModalText"></p>
+    <div class="modal-actions">
+      <button class="btn-primary" type="button" id="runReviewBtn">Run Review</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="appealModalBackdrop">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="appealModalTitle">
+    <h2 id="appealModalTitle">Denial Received</h2>
+    <p id="appealModalText"></p>
+    <div class="modal-actions">
+      <button class="btn-secondary" type="button" id="chooseAppeal">File a Formal Appeal</button>
+      <button class="btn-primary" type="button" id="choosePeer">Request Peer-to-Peer Review</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="summaryModalBackdrop">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="summaryModalTitle">
+    <h2 id="summaryModalTitle">Case Summary</h2>
+    <p id="summaryDecisionLine"></p>
+    <div class="summary-stats">
+      <div><b>Total Days Elapsed</b><span id="sumDays"></span></div>
+      <div><b>Efficiency Score</b><span id="sumEfficiency"></span></div>
+      <div><b>Scenario</b><span id="sumScenario" style="font-size:13px;"></span></div>
+      <div><b>Final Decision</b><span id="sumDecision" style="font-size:13px;"></span></div>
+    </div>
+    <div class="zone-label">Path taken</div>
+    <ul class="summary-log" id="summaryLog"></ul>
+    <div class="modal-actions">
+      <button class="btn-primary" type="button" id="summaryRestartBtn">Start New Patient</button>
+    </div>
+  </div>
+</div>
+
+<div id="stampOverlay" aria-hidden="true"><div class="stamp" id="stampEl">APPROVED</div></div>
+<div id="confettiLayer" aria-hidden="true"></div>
+
+<script>
+/* ======================================================================
+   PRIOR AUTHORIZATION WORKFLOW SIMULATOR — application logic
+   Pure vanilla JS. All state lives in memory (the `state` object below);
+   nothing is persisted to localStorage or a server.
+   ====================================================================== */
+
+/* ----------------------------------------------------------------------
+   1. SCENARIO DATA
+   Edit this array to add / change patient scenarios. Each scenario
+   defines the documents a payer typically wants, a rough day count for
+   each phase, and a base approval / pend / denial risk profile that the
+   outcome engine uses before factoring in how complete the submitted
+   packet is.
+   ---------------------------------------------------------------------- */
+const SCENARIOS = [
+  {
+    id: 'elective-surgery',
+    icon: '🦴',
+    name: 'Elective Surgery',
+    patientName: 'Maria Chen, 54',
+    description: 'Scheduled total knee replacement for advanced osteoarthritis after failed conservative care.',
+    necessityText: 'The surgeon must show the joint damage is severe enough, and conservative treatments (physical therapy, injections, medication) have already failed, to meet the payer\u2019s medical policy for joint replacement.',
+    requiredDocs: ['Physician order for surgery', 'Imaging report (X-ray/MRI)', 'Conservative treatment history', 'Recent clinical progress notes'],
+    optionalDocs: ['Physical therapy records', 'Patient functional-status questionnaire'],
+    baseDays: { necessity: 1, documentation: 2, transit: 1, payerReview: 5 },
+    risk: { approve: 0.45, pend: 0.35, deny: 0.20 }
+  },
+  {
+    id: 'mri',
+    icon: '🧲',
+    name: 'Advanced Imaging (MRI)',
+    patientName: 'Daniel Osei, 41',
+    description: 'Lumbar spine MRI ordered to investigate six weeks of unresolved lower back pain with leg numbness.',
+    necessityText: 'Payers usually require documented red-flag symptoms or a trial of conservative therapy before approving an MRI, since imaging is expensive and can be over-used for routine back pain.',
+    requiredDocs: ['Physician order for MRI', 'Symptom & exam notes', 'Conservative treatment trial (meds/PT)'],
+    optionalDocs: ['Prior X-ray results', 'Neurological exam findings'],
+    baseDays: { necessity: 1, documentation: 1, transit: 1, payerReview: 3 },
+    risk: { approve: 0.55, pend: 0.30, deny: 0.15 }
+  },
+  {
+    id: 'specialty-med',
+    icon: '💊',
+    name: 'Specialty Medication',
+    patientName: 'Priya Nair, 36',
+    description: 'New biologic infusion therapy prescribed for moderate-to-severe rheumatoid arthritis.',
+    necessityText: 'Specialty drugs are costly, so payers typically require proof that lower-cost first-line medications were tried and failed (step therapy), plus recent lab and diagnostic confirmation.',
+    requiredDocs: ['Prescriber order & dosing plan', 'Diagnosis confirmation (labs/imaging)', 'Step-therapy / prior medication history'],
+    optionalDocs: ['Specialist consultation note', 'Patient weight & vitals'],
+    baseDays: { necessity: 2, documentation: 2, transit: 1, payerReview: 6 },
+    risk: { approve: 0.40, pend: 0.35, deny: 0.25 }
+  },
+  {
+    id: 'inpatient',
+    icon: '🏥',
+    name: 'Inpatient Admission',
+    patientName: 'Robert Alvarez, 68',
+    description: 'Admission requested for acute exacerbation of congestive heart failure requiring IV diuresis.',
+    necessityText: 'For inpatient stays, payers apply level-of-care criteria to decide whether the patient truly needs inpatient care versus observation, so vitals, labs and the treatment plan all matter.',
+    requiredDocs: ['Admitting physician note', 'Vital signs & labs', 'Treatment plan & expected length of stay'],
+    optionalDocs: ['Cardiology consult', 'Prior discharge summary'],
+    baseDays: { necessity: 1, documentation: 1, transit: 1, payerReview: 2 },
+    risk: { approve: 0.50, pend: 0.28, deny: 0.22 }
+  }
+];
+
+/* ----------------------------------------------------------------------
+   2. APPLICATION STATE
+   ---------------------------------------------------------------------- */
+let state = null; // built fresh in resetState()
+
+function resetState(){
+  state = {
+    scenario: null,
+    daysElapsed: 0,
+    efficiencyPenalties: 0,      // accumulated penalty points
+    currentStage: null,
+    allowedTargets: [],           // stage ids the case card may currently be dropped into
+    docsCollectedRequired: new Set(),
+    docsCollectedOptional: new Set(),
+    pendUsed: false,
+    appealChoice: null,           // 'appeal' | 'peer'
+    finalDecision: null,          // 'approved' | 'denied'
+    log: []                       // human-readable history for the summary
+  };
+}
+
+/* ----------------------------------------------------------------------
+   3. DOM SHORTCUTS
+   ---------------------------------------------------------------------- */
+const $ = (sel, root=document) => root.querySelector(sel);
+const $all = (sel, root=document) => Array.from(root.querySelectorAll(sel));
+
+const daysEl = $('#daysElapsed');
+const efficiencyEl = $('#efficiencyScore');
+const eduText = $('#eduText');
+const trackerItems = $all('#tracker li');
+
+const zones = {
+  'select-scenario': $('#zone-select-scenario'),
+  'necessity': $('#zone-necessity'),
+  'documentation': $('#zone-documentation'),
+  'submit': $('#zone-submit'),
+  'payer-review': $('#zone-payer-review'),
+  'respond-pend': $('#zone-respond-pend'),
+  'appeal': $('#zone-appeal'),
+  'payer-rereview': $('#zone-payer-rereview'),
+  'outcome': $('#zone-outcome')
+};
+
+let caseCardEl = null; // the single draggable case card, created on scenario pick
+
+/* ----------------------------------------------------------------------
+   4. GENERIC POINTER-BASED DRAG & DROP
+   Works with mouse and touch alike (native HTML5 DnD does not support
+   touch reliably, so we roll a small pointer-events based version).
+   ---------------------------------------------------------------------- */
+function makeDraggable(el, { zoneSelector, onDrop, canDrag }){
+  el.style.touchAction = 'none';
+  el.addEventListener('pointerdown', (e) => {
+    if (canDrag && !canDrag()) return;
+    e.preventDefault();
+    const rect = el.getBoundingClientRect();
+    const offsetX = e.clientX - rect.left;
+    const offsetY = e.clientY - rect.top;
+    const originalParent = el.parentElement;
+    const originalNextSibling = el.nextSibling;
+    const originalWidth = rect.width;
+
+    document.body.appendChild(el);
+    el.style.position = 'fixed';
+    el.style.zIndex = 1000;
+    el.style.width = originalWidth + 'px';
+    el.style.left = (e.clientX - offsetX) + 'px';
+    el.style.top = (e.clientY - offsetY) + 'px';
+    el.classList.add('dragging');
+    el.setPointerCapture(e.pointerId);
+
+    function highlightUnder(x, y){
+      $all(zoneSelector).forEach(z => z.classList.remove('zone-hover'));
+      el.style.display = 'none';
+      const under = document.elementFromPoint(x, y);
+      el.style.display = '';
+      const zone = under ? under.closest(zoneSelector) : null;
+      if (zone) zone.classList.add('zone-hover');
+      return zone;
+    }
+
+    function onMove(ev){
+      el.style.left = (ev.clientX - offsetX) + 'px';
+      el.style.top = (ev.clientY - offsetY) + 'px';
+      highlightUnder(ev.clientX, ev.clientY);
+    }
+
+    function cleanupStyles(){
+      el.style.position = '';
+      el.style.zIndex = '';
+      el.style.left = '';
+      el.style.top = '';
+      el.style.width = '';
+      el.classList.remove('dragging');
+      $all(zoneSelector).forEach(z => z.classList.remove('zone-hover'));
+    }
+
+    function onUp(ev){
+      document.removeEventListener('pointermove', onMove);
+      document.removeEventListener('pointerup', onUp);
+      try{ el.releasePointerCapture(ev.pointerId); }catch(err){}
+      el.style.display = 'none';
+      const under = document.elementFromPoint(ev.clientX, ev.clientY);
+      el.style.display = '';
+      const zone = under ? under.closest(zoneSelector) : null;
+      cleanupStyles();
+
+      const accepted = zone ? onDrop(zone, el) : false;
+      if (!accepted){
+        if (originalNextSibling) originalParent.insertBefore(el, originalNextSibling);
+        else originalParent.appendChild(el);
+      }
+    }
+
+    document.addEventListener('pointermove', onMove);
+    document.addEventListener('pointerup', onUp);
+  });
+
+  // Click / keyboard fallback so the sim is usable without drag gestures.
+  el.addEventListener('click', () => {
+    if (canDrag && !canDrag()) return;
+    if (el.dataset.clickArmed === '1'){
+      el.dataset.clickArmed = '0';
+      el.classList.remove('armed');
+    } else {
+      $all(zoneSelector).forEach(z => z.classList.remove('armed-target'));
+      el.dataset.clickArmed = '1';
+      el.classList.add('armed');
+    }
+  });
+}
+
+/* Simple "tap the card, then tap the zone" fallback for accessibility. */
+function wireClickFallback(zoneSelector, onDrop){
+  $all(zoneSelector).forEach(zone => {
+    zone.addEventListener('click', () => {
+      const armed = $all('.armed')[0];
+      if (!armed) return;
+      armed.dataset.clickArmed = '0';
+      armed.classList.remove('armed');
+      onDrop(zone, armed);
+    });
+  });
+}
+
+/* ----------------------------------------------------------------------
+   5. STAGE / TRACKER HELPERS
+   ---------------------------------------------------------------------- */
+const TRACKER_STEP_FOR_STAGE = {
+  'select-scenario': 1,
+  'necessity': 2,
+  'documentation': 3,
+  'submit': 4,
+  'payer-review': 5,
+  'respond-pend': 6,
+  'appeal': 6,
+  'payer-rereview': 6,
+  'outcome': 7
+};
+
+function updateTracker(stageId){
+  const activeStep = TRACKER_STEP_FOR_STAGE[stageId] || 1;
+  trackerItems.forEach(li => {
+    const step = Number(li.dataset.step);
+    li.classList.toggle('done', step < activeStep);
+    li.classList.toggle('current', step === activeStep);
+  });
+}
+
+function setAllowedTargets(list){
+  state.allowedTargets = list;
+  Object.entries(zones).forEach(([id, el]) => {
+    el.classList.toggle('zone-target', list.includes(id));
+  });
+}
+
+function enableZone(stageId){ zones[stageId].classList.remove('zone-disabled'); }
+
+function addDays(n, reason){
+  state.daysElapsed += n;
+  daysEl.textContent = state.daysElapsed;
+  if (reason) state.log.push(`+${n} day${n===1?'':'s'} — ${reason}`);
+  recomputeEfficiency();
+}
+
+function penalize(points, reason){
+  state.efficiencyPenalties += points;
+  if (reason) state.log.push(`Efficiency -${points} — ${reason}`);
+  recomputeEfficiency();
+}
+
+function recomputeEfficiency(){
+  const dayPenalty = state.daysElapsed * 1.5;
+  const score = Math.max(0, Math.round(100 - dayPenalty - state.efficiencyPenalties));
+  efficiencyEl.textContent = score;
+  return score;
+}
+
+function setEdu(text){ eduText.textContent = text; }
+
+function logStep(text){ state.log.push(text); }
+
+/* ----------------------------------------------------------------------
+   6. MODAL HELPERS
+   ---------------------------------------------------------------------- */
+function openModal(id){ $(id).classList.add('open'); }
+function closeModal(id){ $(id).classList.remove('open'); }
+
+/* ----------------------------------------------------------------------
+   7. SCENARIO SELECTION
+   ---------------------------------------------------------------------- */
+function buildScenarioGrid(){
+  const grid = $('#scenarioGrid');
+  grid.innerHTML = '';
+  SCENARIOS.forEach(sc => {
+    const btn = document.createElement('button');
+    btn.className = 'scenario-option';
+    btn.type = 'button';
+    btn.innerHTML = `<div class="icon">${sc.icon}</div>
+      <div class="title">${sc.name}</div>
+      <div class="desc">${sc.description}</div>`;
+    btn.addEventListener('click', () => startScenario(sc));
+    grid.appendChild(btn);
+  });
+}
+
+function startScenario(sc){
+  resetState();
+  state.scenario = sc;
+  state.currentStage = 'select-scenario';
+  closeModal('#scenarioModalBackdrop');
+
+  // reset zone availability / labels
+  zones['respond-pend'].classList.add('zone-disabled');
+  zones['appeal'].classList.add('zone-disabled');
+  zones['payer-rereview'].classList.add('zone-disabled');
+  $('#scenarioHint').textContent = `${sc.patientName} — ${sc.name}`;
+
+  daysEl.textContent = '0';
+  efficiencyEl.textContent = '100';
+  updateTracker('select-scenario');
+
+  // build the case card
+  if (caseCardEl) caseCardEl.remove();
+  caseCardEl = document.createElement('div');
+  caseCardEl.className = 'case-card';
+  caseCardEl.id = 'caseCard';
+  caseCardEl.innerHTML = `
+    <div class="tag">CASE #${Math.floor(1000+Math.random()*9000)}</div>
+    <div class="name">${sc.patientName}</div>
+    <div class="meta">${sc.icon} ${sc.name}</div>
+    <span class="status-pill" id="caseStatusPill">Case opened</span>`;
+  zones['select-scenario'].appendChild(caseCardEl);
+
+  makeDraggable(caseCardEl, { zoneSelector: '.zone', onDrop: handleCaseDrop });
+  wireClickFallback('.zone', handleCaseDrop);
+
+  setEdu(`New case: ${sc.patientName} needs prior authorization for ${sc.name.toLowerCase()}. ${sc.description} Drag the case folder into "Medical Necessity Evaluation" in the Provider lane to begin.`);
+  setAllowedTargets(['necessity']);
+  logStep(`Case opened: ${sc.name} for ${sc.patientName}.`);
+}
+
+/* ----------------------------------------------------------------------
+   8. MAIN STAGE-TRANSITION HANDLER
+   Called whenever the case card is dropped on (or clicked-into) a zone.
+   ---------------------------------------------------------------------- */
+function handleCaseDrop(zone, cardEl){
+  const target = zone.dataset.stage;
+  if (!target || !state.allowedTargets.includes(target)) {
+    zone.classList.add('shake');
+    setTimeout(() => zone.classList.remove('shake'), 350);
+    return false;
+  }
+  zone.appendChild(cardEl);
+  state.currentStage = target;
+  updateTracker(target);
+  onEnterStage(target);
+  return true;
+}
+
+function setPill(text){
+  const pill = $('#caseStatusPill');
+  if (pill) pill.textContent = text;
+}
+
+function onEnterStage(stageId){
+  const sc = state.scenario;
+  switch(stageId){
+
+    case 'necessity': {
+      addDays(sc.baseDays.necessity, 'medical necessity evaluation');
+      setPill('Necessity review');
+      setEdu(`Medical necessity check: ${sc.necessityText} Once the clinician confirms necessity, drag the case into "Document Collection".`);
+      setAllowedTargets(['documentation']);
+      logStep('Medical necessity evaluated by the ordering provider.');
+      break;
+    }
+
+    case 'documentation': {
+      setPill('Gathering documents');
+      setEdu(`Document collection: payers will only review a "clean" packet. Open the document tray, gather the required paperwork for ${sc.name.toLowerCase()}, then drag the case into "Submit to Payer" whenever you're ready. Missing required documents raise the chance of a pend or denial.`);
+      openDocModal({
+        intro: `${sc.name} typically requires the following documentation before a payer will review the request:`,
+        requiredDocs: sc.requiredDocs,
+        optionalDocs: sc.optionalDocs,
+        targetSet: state.docsCollectedRequired,
+        optionalSet: state.docsCollectedOptional
+      });
+      setAllowedTargets(['submit']);
+      logStep('Document collection started.');
+      break;
+    }
+
+    case 'submit': {
+      addDays(sc.baseDays.documentation, 'preparing & compiling the authorization packet');
+      addDays(sc.baseDays.transit, 'transmitting request to the payer');
+      setPill('Submitted to payer');
+      const ratio = requiredRatio();
+      const pct = Math.round(ratio*100);
+      setEdu(`Submission sent: the provider transmits the packet (${pct}% of required documents included) to the payer's utilization management team. Drag the case into "Payer Review" to continue.`);
+      setAllowedTargets(['payer-review']);
+      logStep(`Packet submitted to payer with ${pct}% of required documents.`);
+      break;
+    }
+
+    case 'payer-review': {
+      setPill('Under payer review');
+      setEdu(`Payer review: a utilization management nurse or medical director compares the packet against clinical criteria. Open the review panel to run the decision.`);
+      $('#reviewModalText').textContent = `${sc.name} for ${sc.patientName} is now with the payer's UM team. Click "Run Review" to see the decision.`;
+      openModal('#reviewModalBackdrop');
+      setAllowedTargets([]); // wait for the review outcome
+      logStep('Case entered payer utilization review.');
+      break;
+    }
+
+    case 'respond-pend': {
+      setPill('Responding to pend');
+      const missing = sc.requiredDocs.filter(d => !state.docsCollectedRequired.has(d));
+      setEdu(`The payer pended the request, meaning it's neither approved nor denied — they need more information before deciding. Provide the missing documentation, then resubmit.`);
+      openDocModal({
+        intro: missing.length
+          ? 'The payer flagged these outstanding items as missing from the original packet:'
+          : 'The payer wants any additional supporting detail you can provide, even though your packet already looked complete:',
+        requiredDocs: missing.length ? missing : sc.requiredDocs,
+        optionalDocs: sc.optionalDocs.filter(d => !state.docsCollectedOptional.has(d)),
+        targetSet: state.docsCollectedRequired,
+        optionalSet: state.docsCollectedOptional
+      });
+      setAllowedTargets(['payer-rereview']);
+      logStep('Payer pended the request for additional information.');
+      break;
+    }
+
+    case 'appeal': {
+      setPill('Denial — deciding path');
+      setEdu(`The payer denied the request. The provider can file a formal written appeal (slower, thorough) or request a Peer-to-Peer Review, where the ordering physician discusses the case directly with the payer's medical director (faster, more conversational).`);
+      $('#appealModalText').textContent = `${sc.patientName}'s request for ${sc.name.toLowerCase()} was denied. Choose how the provider will respond.`;
+      openModal('#appealModalBackdrop');
+      setAllowedTargets([]); // wait for appeal/peer choice
+      logStep('Payer denied the request; provider deciding on appeal path.');
+      break;
+    }
+
+    case 'payer-rereview': {
+      setPill('Second-look review');
+      const via = state.appealChoice === 'appeal' ? 'formal appeal'
+                : state.appealChoice === 'peer' ? 'peer-to-peer review'
+                : 'updated information';
+      setEdu(`Re-review: the payer looks at the case again in light of the ${via}. Open the review panel to see the final decision.`);
+      $('#reviewModalText').textContent = `${sc.name} for ${sc.patientName} is back with the payer for a second look, following ${via}. Click "Run Review" for the final decision.`;
+      openModal('#reviewModalBackdrop');
+      setAllowedTargets([]);
+      logStep(`Case returned to payer for re-review (${via}).`);
+      break;
+    }
+
+    case 'outcome': {
+      finishCase();
+      break;
+    }
+  }
+}
+
+/* ----------------------------------------------------------------------
+   9. DOCUMENT COLLECTION MINI-INTERACTION
+   ---------------------------------------------------------------------- */
+function requiredRatio(){
+  const total = state.scenario.requiredDocs.length;
+  if (total === 0) return 1;
+  return state.docsCollectedRequired.size / total;
+}
+function optionalBonus(){
+  return Math.min(0.10, state.docsCollectedOptional.size * 0.05);
+}
+
+function openDocModal({ intro, requiredDocs, optionalDocs, targetSet, optionalSet }){
+  $('#docModalIntro').textContent = intro;
+  const pool = $('#docPool');
+  const packet = $('#docPacket');
+  pool.innerHTML = '';
+  packet.innerHTML = '';
+
+  // Show anything already collected inside the packet (read-only chips)
+  targetSet.forEach(name => packet.appendChild(makeCollectedChip(name, true)));
+  optionalSet.forEach(name => packet.appendChild(makeCollectedChip(name, false)));
+
+  requiredDocs.forEach(name => {
+    if (targetSet.has(name)) return;
+    pool.appendChild(makeChip(name, true, targetSet, packet));
+  });
+  optionalDocs.forEach(name => {
+    if (optionalSet.has(name)) return;
+    pool.appendChild(makeChip(name, false, optionalSet, packet));
+  });
+
+  updateDocProgress();
+  openModal('#docModalBackdrop');
+}
+
+function makeCollectedChip(name, required){
+  const chip = document.createElement('span');
+  chip.className = `chip collected ${required ? 'required' : 'optional'}`;
+  chip.textContent = name;
+  return chip;
+}
+
+function makeChip(name, required, set, packetEl){
+  const chip = document.createElement('div');
+  chip.className = `chip ${required ? 'required' : 'optional'}`;
+  chip.textContent = name;
+
+  function collect(){
+    if (chip.dataset.done === '1') return false;
+    chip.dataset.done = '1';
+    chip.classList.add('collected');
+    chip.draggable = false;
+    set.add(name);
+    updateDocProgress();
+    return true;
+  }
+
+  makeDraggable(chip, {
+    zoneSelector: '#docPacket',
+    onDrop: (zone) => {
+      if (zone.id !== 'docPacket') return false;
+      return collect();
+    },
+    canDrag: () => chip.dataset.done !== '1'
+  });
+
+  // Tap-to-collect fallback (in addition to the generic click-arm system).
+  chip.addEventListener('dblclick', collect);
+
+  return chip;
+}
+wireClickFallback('#docPacket', (zone, chip) => {
+  if (zone.id !== 'docPacket') return false;
+  if (chip.classList.contains('chip')) {
+    chip.dataset.done = '1';
+    chip.classList.add('collected');
+    const name = chip.textContent;
+    // figure out which set it belongs to by required/optional class
+    if (chip.classList.contains('required')) state.docsCollectedRequired.add(name);
+    else state.docsCollectedOptional.add(name);
+    updateDocProgress();
+    return true;
+  }
+  return false;
+});
+
+function updateDocProgress(){
+  const total = state.scenario.requiredDocs.length;
+  const got = state.docsCollectedRequired.size;
+  $('#docProgress').textContent = `${got} of ${total} required documents collected (${Math.round((got/total)*100)}%). Optional items add a small approval bonus.`;
+}
+
+$('#docModalClose').addEventListener('click', () => closeModal('#docModalBackdrop'));
+
+/* ----------------------------------------------------------------------
+   10. PAYER REVIEW / OUTCOME ENGINE
+   ---------------------------------------------------------------------- */
+function weightedPick(weights){
+  // weights: { key: number, ... } — returns a key chosen proportionally
+  const total = Object.values(weights).reduce((a,b) => a+b, 0);
+  let r = Math.random() * total;
+  for (const [key, w] of Object.entries(weights)){
+    if (r < w) return key;
+    r -= w;
+  }
+  return Object.keys(weights)[0];
+}
+
+function runInitialReview(){
+  const sc = state.scenario;
+  const ratio = requiredRatio();
+  const bonus = optionalBonus();
+  let approve = sc.risk.approve + ratio*0.30 + bonus - (1-ratio)*0.15;
+  let deny    = sc.risk.deny    + (1-ratio)*0.22 - bonus*0.5;
+  approve = Math.max(0.03, approve);
+  deny    = Math.max(0.03, deny);
+  let pend  = Math.max(0.03, 1 - approve - deny);
+
+  const result = weightedPick({ approve, pend, deny });
+  addDays(sc.baseDays.payerReview, 'payer utilization management processing time');
+  return result;
+}
+
+function runSecondReview(){
+  // Used after a pend response or an appeal / peer-to-peer — no further pend possible.
+  const sc = state.scenario;
+  const ratio = requiredRatio();
+  const bonus = optionalBonus();
+  let approve = sc.risk.approve + 0.20 + ratio*0.30 + bonus;
+  if (state.appealChoice === 'peer') approve += 0.05; // peer-to-peer tends to resolve faster/better
+  approve = Math.min(0.95, Math.max(0.05, approve));
+  const deny = 1 - approve;
+  return weightedPick({ approve, deny });
+}
+
+$('#runReviewBtn').addEventListener('click', () => {
+  closeModal('#reviewModalBackdrop');
+  const isSecondPass = state.currentStage === 'payer-rereview';
+  const result = isSecondPass ? runSecondReview() : runInitialReview();
+
+  if (result === 'approve'){
+    state.finalDecision = 'approved';
+    logStep('Payer decision: APPROVED.');
+    showStamp('approve', 'APPROVED');
+    setPill('Approved');
+    setEdu(`Decision: approved. The payer agreed the service meets medical necessity criteria. Drag the case into "Outcome Received" in the Patient lane to close it out.`);
+    setAllowedTargets(['outcome']);
+  } else if (result === 'deny'){
+    state.finalDecision = isSecondPass ? 'denied' : null;
+    logStep(isSecondPass ? 'Payer decision (final): DENIED.' : 'Payer decision: DENIED.');
+    showStamp('deny', 'DENIED');
+    setPill('Denied');
+    if (isSecondPass){
+      setEdu(`Final decision: denied. Even after the ${state.appealChoice === 'appeal' ? 'appeal' : 'peer-to-peer review'}, the payer did not overturn the denial. Drag the case into "Outcome Received" to close the case.`);
+      setAllowedTargets(['outcome']);
+    } else {
+      penalize(15, 'initial denial');
+      setEdu(`Decision: denied. The payer determined medical necessity criteria weren't met from the submitted packet. Drag the case into "Appeal / Peer-to-Peer" in the Provider lane to contest the decision.`);
+      enableZone('appeal');
+      setAllowedTargets(['appeal']);
+    }
+  } else { // pend — only reachable on the initial pass
+    state.pendUsed = true;
+    penalize(10, 'payer pended for more information');
+    logStep('Payer decision: PENDED for additional information.');
+    showStamp('pend', 'PENDED');
+    setPill('Pended');
+    setEdu(`Decision: pended. The payer needs more information before they can decide. Drag the case into "Respond to Pend" in the Provider lane to supply it.`);
+    enableZone('respond-pend');
+    setAllowedTargets(['respond-pend']);
+  }
+});
+
+/* Appeal vs Peer-to-Peer choice */
+$('#chooseAppeal').addEventListener('click', () => chooseAppealPath('appeal'));
+$('#choosePeer').addEventListener('click', () => chooseAppealPath('peer'));
+
+function chooseAppealPath(kind){
+  state.appealChoice = kind;
+  closeModal('#appealModalBackdrop');
+  if (kind === 'appeal'){
+    addDays(7, 'preparing and filing a formal written appeal');
+    penalize(20, 'formal appeal required');
+    setEdu(`Formal appeal filed: the provider submits a written appeal with supporting rationale and any new evidence. This is thorough but slow. Drag the case into "Payer Re-Review".`);
+  } else {
+    addDays(2, 'scheduling peer-to-peer review call');
+    penalize(8, 'peer-to-peer review required');
+    setEdu(`Peer-to-peer review scheduled: the ordering physician will speak directly with the payer's medical director to walk through the clinical reasoning. This is usually faster than a written appeal. Drag the case into "Payer Re-Review".`);
+  }
+  logStep(kind === 'appeal' ? 'Provider filed a formal written appeal.' : 'Provider requested a peer-to-peer review.');
+  enableZone('payer-rereview');
+  setAllowedTargets(['payer-rereview']);
+}
+
+/* ----------------------------------------------------------------------
+   11. STAMP + CELEBRATION EFFECTS
+   ---------------------------------------------------------------------- */
+function showStamp(kind, label){
+  const overlay = $('#stampOverlay');
+  const stampEl = $('#stampEl');
+  stampEl.className = `stamp ${kind}`;
+  stampEl.textContent = label;
+  overlay.classList.add('show');
+  // restart animation
+  stampEl.classList.remove('stamp-animate');
+  void stampEl.offsetWidth;
+  stampEl.classList.add('stamp-animate');
+
+  setTimeout(() => { overlay.classList.remove('show'); }, 1300);
+
+  if (kind === 'approve') launchConfetti();
+}
+
+function launchConfetti(){
+  const layer = $('#confettiLayer');
+  const blues = ['#0f3d6e', '#2969a3', '#3f8fe0', '#bdd8f2', '#ffffff'];
+  for (let i=0; i<48; i++){
+    const piece = document.createElement('div');
+    piece.className = 'confetti-piece';
+    const size = 6 + Math.random()*8;
+    piece.style.width = size + 'px';
+    piece.style.height = (size*1.4) + 'px';
+    piece.style.left = Math.random()*100 + 'vw';
+    piece.style.background = blues[Math.floor(Math.random()*blues.length)];
+    piece.style.animationDuration = (2 + Math.random()*1.8) + 's';
+    piece.style.animationDelay = (Math.random()*0.4) + 's';
+    piece.style.borderRadius = Math.random() > 0.5 ? '50%' : '2px';
+    layer.appendChild(piece);
+    setTimeout(() => piece.remove(), 4500);
+  }
+}
+
+/* ----------------------------------------------------------------------
+   12. CASE COMPLETION / SUMMARY
+   ---------------------------------------------------------------------- */
+function finishCase(){
+  const sc = state.scenario;
+  const finalScore = recomputeEfficiency();
+  setPill(state.finalDecision === 'approved' ? 'Case closed — approved' : 'Case closed — denied');
+  setEdu(`Case closed. ${state.finalDecision === 'approved'
+    ? 'The patient can proceed with care under the approved authorization.'
+    : 'The denial stands; the patient and provider will need to consider alternative treatment options or self-pay.'}`);
+
+  $('#summaryDecisionLine').textContent = state.finalDecision === 'approved'
+    ? `Great outcome — ${sc.patientName}'s request for ${sc.name.toLowerCase()} was ultimately approved.`
+    : `${sc.patientName}'s request for ${sc.name.toLowerCase()} was ultimately denied.`;
+  $('#sumDays').textContent = state.daysElapsed;
+  $('#sumEfficiency').textContent = finalScore;
+  $('#sumScenario').textContent = `${sc.icon} ${sc.name}`;
+  $('#sumDecision').textContent = state.finalDecision === 'approved' ? 'Approved ✓' : 'Denied ✕';
+
+  const logEl = $('#summaryLog');
+  logEl.innerHTML = '';
+  state.log.forEach(entry => {
+    const li = document.createElement('li');
+    li.textContent = entry;
+    logEl.appendChild(li);
+  });
+
+  setAllowedTargets([]);
+  openModal('#summaryModalBackdrop');
+}
+
+/* ----------------------------------------------------------------------
+   13. RESTART / NEW PATIENT
+   ---------------------------------------------------------------------- */
+function fullReset(){
+  closeModal('#docModalBackdrop');
+  closeModal('#reviewModalBackdrop');
+  closeModal('#appealModalBackdrop');
+  closeModal('#summaryModalBackdrop');
+  if (caseCardEl){ caseCardEl.remove(); caseCardEl = null; }
+  zones['respond-pend'].classList.add('zone-disabled');
+  zones['appeal'].classList.add('zone-disabled');
+  zones['payer-rereview'].classList.add('zone-disabled');
+  $all('.zone').forEach(z => z.classList.remove('zone-target','zone-hover'));
+  daysEl.textContent = '0';
+  efficiencyEl.textContent = '100';
+  updateTracker('select-scenario');
+  $('#scenarioHint').textContent = 'No case yet — start a new patient.';
+  setEdu('Click "New Patient" or choose a scenario below to start your first case.');
+  resetState();
+  buildScenarioGrid();
+  openModal('#scenarioModalBackdrop');
+}
+
+$('#restartBtn').addEventListener('click', fullReset);
+$('#summaryRestartBtn').addEventListener('click', fullReset);
+
+/* ----------------------------------------------------------------------
+   14. INITIALISATION
+   ---------------------------------------------------------------------- */
+resetState();
+updateTracker('select-scenario');
+buildScenarioGrid();
+openModal('#scenarioModalBackdrop');
+
+</script>
+</body>
+</html>
